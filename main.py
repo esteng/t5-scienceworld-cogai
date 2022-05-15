@@ -3,6 +3,7 @@ import argparse
 import os
 import re
 import time
+from requests import JSONDecodeError
 import torch
 
 from math import ceil
@@ -12,7 +13,8 @@ from transformers import T5Tokenizer, T5ForConditionalGeneration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def build_input_str_behavior_cloning(task_description, prev_obs, prev_action, cur_obs, cur_look, cur_inv):
-    outStr = task_description + ' </s> ' + cur_obs + ' ' + cur_inv + ' ' + cur_look + ' </s> <extra_id_0>' + ' </s> ' + prev_action + ' </s> ' + prev_obs + ' </s>'
+    task_description = re.sub("Task Description:\s+", "", task_description)
+    outStr = task_description + '</s> ' + cur_obs + ' ' + cur_inv + ' ' + cur_look + ' </s> <extra_id_0>' + ' </s> ' + prev_action + '</s> ' + prev_obs + '</s>'
     outStr = sanitizeStr(outStr)
     return outStr
 
@@ -193,7 +195,6 @@ def T5Model(args):
 
             # Get valid actions at this point
             getBestValidAction = findValidAction(predStrs, env, lastNActions)
-
             action = getBestValidAction
             obs, score, done, info = env.step(action)
 
@@ -202,7 +203,6 @@ def T5Model(args):
                 score = 0
             print("Obs: " + obs)
 
-            #print("Input string: " + str(input_str))
             print(f"Variation: {variation}, Step: {step}, Score: {score}, Action: {action}")
             print("")
             step += 1
@@ -224,8 +224,11 @@ def T5Model(args):
 
 
         # Store results
-        env.storeRunHistory(variation, notes = {'mode':args["mode"], 'lm':str(args["lm_path"])} )
-        env.saveRunHistoriesBufferIfFull(filenameOutPrefix, maxPerFile=args["max_episode_per_file"])
+        try:
+            env.storeRunHistory(variation, notes = {'mode':args["mode"], 'lm':str(args["lm_path"])} )
+            env.saveRunHistoriesBufferIfFull(filenameOutPrefix, maxPerFile=args["max_episode_per_file"])
+        except:
+            pass 
 
         scores.append(score)
 
@@ -234,7 +237,10 @@ def T5Model(args):
         time.sleep(2)
 
     # Episodes are finished -- manually save any last histories still in the buffer
-    env.saveRunHistoriesBufferIfFull(filenameOutPrefix, maxPerFile=args["max_episode_per_file"], forceSave=True)
+    try:
+        env.saveRunHistoriesBufferIfFull(filenameOutPrefix, maxPerFile=args["max_episode_per_file"], forceSave=True)
+    except:
+        pass 
 
     avg = sum(scores) / len(scores)
     print("Average score: " + str(avg))
